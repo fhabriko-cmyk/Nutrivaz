@@ -6,6 +6,7 @@
 <title>Nutrivaz — Gestão de Alimentação</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 
@@ -571,6 +572,13 @@ textarea.fi{min-height:65px;resize:vertical;}
 // ══════════════════════════════════════════════════════════════════
 // ESTADO
 // ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// SUPABASE
+// ══════════════════════════════════════════════════════════════════
+var SUPA_URL='https://hubrtvkizhhdyrwhemzo.supabase.co';
+var SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1YnJ0dmtpemhoZHlyd2hlbXpvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODUyMDAsImV4cCI6MjA5NTA2MTIwMH0.1uqlrTJxVOMSpzR8DzBh1h2siFvPmnW_DA8CTYGzzmk';
+var sb=supabase.createClient(SUPA_URL,SUPA_KEY);
+
 var REF=[], CAFE=[], ALIM=[], LOG=[], EMP=[], EST=[], USERS=[], CI={};
 var CFG={nome:'Nutrivaz',obra:'Gestão de Alimentação de Obra',logo:'',valCafe:0,valAlm:0,valJan:0};
 var filtroPeriodo='hoje';
@@ -593,26 +601,29 @@ var hoje=new Date().toISOString().slice(0,10);
 // ══════════════════════════════════════════════════════════════════
 // AUTENTICAÇÃO
 // ══════════════════════════════════════════════════════════════════
-function getUsuarios(){
-  var saved=JSON.parse(localStorage.getItem('nv_USERS')||'[]');
+async function getUsuarios(){
+  var{data}=await sb.from('usuarios').select('*');
+  var users=data||[];
   // Garantir usuários padrão
-  if(!saved.find(function(u){return u.login==='admin';})){
-    saved.unshift({id:'u0',login:'admin',senha:'nutrivaz123',nome:'Administrador',role:'admin'});
+  if(!users.find(function(u){return u.login==='admin';})){
+    var admin={id:'u0',login:'admin',senha:'nutrivaz123',nome:'Administrador',role:'admin'};
+    await sb.from('usuarios').upsert(admin);users.unshift(admin);
   }
-  if(!saved.find(function(u){return u.login==='dev';})){
-    saved.push({id:'u_dev',login:'dev',senha:'dev2024',nome:'Desenvolvedor',role:'dev'});
+  if(!users.find(function(u){return u.login==='dev';})){
+    var dev={id:'u_dev',login:'dev',senha:'dev2024',nome:'Desenvolvedor',role:'dev'};
+    await sb.from('usuarios').upsert(dev);users.push(dev);
   }
-  return saved;
+  return users;
 }
 
-function doLogin(){
+async function doLogin(){
   var login=document.getElementById('loginUser').value.trim().toLowerCase();
   var senha=document.getElementById('loginPass').value;
   if(!login||!senha){
     document.getElementById('loginErr').style.display='block';
     document.getElementById('loginErr').textContent='Preencha usuário e senha.';return;
   }
-  var users=getUsuarios();
+  var users=await getUsuarios();
   var user=users.find(function(u){return u.login.toLowerCase()===login&&u.senha===senha;});
   if(!user){
     document.getElementById('loginErr').style.display='block';
@@ -708,10 +719,31 @@ function carregarCores(){
 }
 
 // ══════════════════════════════════════════════════════════════════
-// PERSIST
+// PERSIST — SUPABASE
 // ══════════════════════════════════════════════════════════════════
-function save(){
+function toRow_ref(r){return{id:r.id,data:r.data,empresa:r.empresa,func_nutrivaz:r.funcNutrivaz||0,func_alm:r.funcAlm||0,qtd_alm:r.qtdAlm||0,qtd_jan:r.qtdJan||0,qtd_ext:r.qtdExt||0,val_alm:r.valAlm||0,val_jan:r.valJan||0,obs:r.obs||'',criado_por:r.criadoPor||'',criado_em:r.criadoEm||'',editado_por:r.editadoPor||'',editado_em:r.editadoEm||''};}
+function fromRow_ref(r){return{id:r.id,data:r.data,empresa:r.empresa,funcNutrivaz:r.func_nutrivaz,funcAlm:r.func_alm,qtdAlm:r.qtd_alm,qtdJan:r.qtd_jan,qtdExt:r.qtd_ext,valAlm:r.val_alm,valJan:r.val_jan,obs:r.obs,criadoPor:r.criado_por,criadoEm:r.criado_em,editadoPor:r.editado_por,editadoEm:r.editado_em};}
+function toRow_cafe(c){return{id:c.id,data:c.data,empresa:c.empresa,qtd:c.qtd||0,itens:c.itens||'',val_cafe:c.valCafe||0,obs:c.obs||'',criado_por:c.criadoPor||'',criado_em:c.criadoEm||''};}
+function fromRow_cafe(c){return{id:c.id,data:c.data,empresa:c.empresa,qtd:c.qtd,itens:c.itens,valCafe:c.val_cafe,obs:c.obs,criadoPor:c.criado_por,criadoEm:c.criado_em};}
+function toRow_alim(a){return{id:a.id,data:a.data,nome:a.nome,unidade:a.unidade,qtd:a.qtd||0,perda:a.perda||0,obs:a.obs||''};}
+function fromRow_alim(a){return{id:a.id,data:a.data,nome:a.nome,unidade:a.unidade,qtd:a.qtd,perda:a.perda,obs:a.obs};}
+function toRow_log(l){return{id:l.id,data:l.data,veiculo:l.veiculo||'',motorista:l.motorista||'',km_saida:l.kmSaida||0,km_chegada:l.kmChegada||0,km_rodado:l.kmRodado||0,destino:l.destino||'',obs:l.obs||''};}
+function fromRow_log(l){return{id:l.id,data:l.data,veiculo:l.veiculo,motorista:l.motorista,kmSaida:l.km_saida,kmChegada:l.km_chegada,kmRodado:l.km_rodado,destino:l.destino,obs:l.obs};}
+function toRow_emp(e){return{id:e.id,nome:e.nome,tipo:e.tipo||'',contato:e.contato||'',obs:e.obs||''};}
+function fromRow_emp(e){return{id:e.id,nome:e.nome,tipo:e.tipo,contato:e.contato,obs:e.obs};}
+function toRow_est(e){return{id:e.id,nome:e.nome,categoria:e.categoria||'',unidade:e.unidade||'',qtd_atual:e.qtdAtual||0,qtd_minima:e.qtdMinima||0};}
+function fromRow_est(e){return{id:e.id,nome:e.nome,categoria:e.categoria,unidade:e.unidade,qtdAtual:e.qtd_atual,qtdMinima:e.qtd_minima};}
+
+async function save(){
   try{
+    if(REF.length) await sb.from('refeicoes').upsert(REF.map(toRow_ref));
+    if(CAFE.length) await sb.from('cafes').upsert(CAFE.map(toRow_cafe));
+    if(ALIM.length) await sb.from('alimentos').upsert(ALIM.map(toRow_alim));
+    if(LOG.length) await sb.from('logistica').upsert(LOG.map(toRow_log));
+    if(EMP.length) await sb.from('empresas').upsert(EMP.map(toRow_emp));
+    if(EST.length) await sb.from('estoque').upsert(EST.map(toRow_est));
+    await sb.from('config').upsert({id:1,dados:CFG});
+    // backup local também
     localStorage.setItem('nv_REF',JSON.stringify(REF));
     localStorage.setItem('nv_CAFE',JSON.stringify(CAFE));
     localStorage.setItem('nv_ALIM',JSON.stringify(ALIM));
@@ -720,14 +752,39 @@ function save(){
     localStorage.setItem('nv_EST',JSON.stringify(EST));
     localStorage.setItem('nv_CFG',JSON.stringify(CFG));
     showToast('Salvo ✓');
-  }catch(e){}
+  }catch(e){console.error('Erro save:',e);showToast('Erro ao salvar!');}
 }
 function showToast(msg){
   var t=document.getElementById('toast');t.textContent=msg;t.style.display='block';
   clearTimeout(window._tt);window._tt=setTimeout(function(){t.style.display='none';},2000);
 }
-function load(){
+async function load(){
   try{
+    var[r1,r2,r3,r4,r5,r6,r7]=await Promise.all([
+      sb.from('refeicoes').select('*'),
+      sb.from('cafes').select('*'),
+      sb.from('alimentos').select('*'),
+      sb.from('logistica').select('*'),
+      sb.from('empresas').select('*'),
+      sb.from('estoque').select('*'),
+      sb.from('config').select('*').eq('id',1).single(),
+    ]);
+    if(r1.data&&r1.data.length) REF=r1.data.map(fromRow_ref);
+    else{var lr=localStorage.getItem('nv_REF');if(lr)REF=JSON.parse(lr);}
+    if(r2.data&&r2.data.length) CAFE=r2.data.map(fromRow_cafe);
+    else{var lc=localStorage.getItem('nv_CAFE');if(lc)CAFE=JSON.parse(lc);}
+    if(r3.data&&r3.data.length) ALIM=r3.data.map(fromRow_alim);
+    else{var la=localStorage.getItem('nv_ALIM');if(la)ALIM=JSON.parse(la);}
+    if(r4.data&&r4.data.length) LOG=r4.data.map(fromRow_log);
+    else{var ll=localStorage.getItem('nv_LOG');if(ll)LOG=JSON.parse(ll);}
+    if(r5.data&&r5.data.length) EMP=r5.data.map(fromRow_emp);
+    else{var le=localStorage.getItem('nv_EMP');if(le)EMP=JSON.parse(le);}
+    if(r6.data&&r6.data.length) EST=r6.data.map(fromRow_est);
+    else{var les=localStorage.getItem('nv_EST');if(les)EST=JSON.parse(les);}
+    if(r7.data&&r7.data.dados){CFG=r7.data.dados;aplicarConfig();}
+    else{var lcfg=localStorage.getItem('nv_CFG');if(lcfg){CFG=JSON.parse(lcfg);aplicarConfig();}}
+  }catch(ex){
+    console.error('Erro load Supabase, usando localStorage:',ex);
     var r=localStorage.getItem('nv_REF');if(r)REF=JSON.parse(r);
     var ca=localStorage.getItem('nv_CAFE');if(ca)CAFE=JSON.parse(ca);
     var a=localStorage.getItem('nv_ALIM');if(a)ALIM=JSON.parse(a);
@@ -735,7 +792,7 @@ function load(){
     var e=localStorage.getItem('nv_EMP');if(e)EMP=JSON.parse(e);
     var es=localStorage.getItem('nv_EST');if(es)EST=JSON.parse(es);
     var c=localStorage.getItem('nv_CFG');if(c){CFG=JSON.parse(c);aplicarConfig();}
-  }catch(ex){}
+  }
 }
 function exportBackup(){
   var b=new Blob([JSON.stringify({REF,CAFE,ALIM,LOG,EMP,EST,CFG},null,2)],{type:'application/json'});
@@ -1124,7 +1181,7 @@ function salvarRef(){
   else REF.unshift(obj);
   save();closeM();renderRefeicoes();
 }
-function delRef(id){if(!confirm('Apagar este registro?'))return;REF=REF.filter(function(x){return x.id!==id;});save();renderRefeicoes();}
+async function delRef(id){if(!confirm('Apagar este registro?'))return;await sb.from('refeicoes').delete().eq('id',id);REF=REF.filter(function(x){return x.id!==id;});save();renderRefeicoes();}
 
 // ══════════════════════════════════════════════════════════════════
 // CAFÉ DA MANHÃ
@@ -1259,7 +1316,7 @@ function salvarCafe(){
   else CAFE.unshift(obj);
   save();closeM();renderCafe();
 }
-function delCafe(id){if(!confirm('Apagar?'))return;CAFE=CAFE.filter(function(x){return x.id!==id;});save();renderCafe();}
+async function delCafe(id){if(!confirm('Apagar?'))return;await sb.from('cafes').delete().eq('id',id);CAFE=CAFE.filter(function(x){return x.id!==id;});save();renderCafe();}
 
 // ══════════════════════════════════════════════════════════════════
 // ALIMENTOS
@@ -1351,7 +1408,7 @@ function salvarAlim(){
   else ALIM.unshift(obj);
   save();closeM();renderAlimentos();
 }
-function delAlim(id){if(!confirm('Apagar?'))return;ALIM=ALIM.filter(function(x){return x.id!==id;});save();renderAlimentos();}
+async function delAlim(id){if(!confirm('Apagar?'))return;await sb.from('alimentos').delete().eq('id',id);ALIM=ALIM.filter(function(x){return x.id!==id;});save();renderAlimentos();}
 
 // ══════════════════════════════════════════════════════════════════
 // ESTOQUE
@@ -1444,7 +1501,7 @@ function salvarEstoque(){
   else EST.push(obj);
   save();closeM();renderEstoque();
 }
-function delEstoque(id){if(!confirm('Apagar item do estoque?'))return;EST=EST.filter(function(x){return x.id!==id;});save();renderEstoque();}
+async function delEstoque(id){if(!confirm('Apagar item do estoque?'))return;await sb.from('estoque').delete().eq('id',id);EST=EST.filter(function(x){return x.id!==id;});save();renderEstoque();}
 
 function movEstoque(id){
   var e=EST.find(function(x){return x.id===id;});if(!e)return;
@@ -1542,7 +1599,7 @@ function salvarLog(){
   else LOG.unshift(obj);
   save();closeM();renderLogistica();
 }
-function delLog(id){if(!confirm('Apagar?'))return;LOG=LOG.filter(function(x){return x.id!==id;});save();renderLogistica();}
+async function delLog(id){if(!confirm('Apagar?'))return;await sb.from('logistica').delete().eq('id',id);LOG=LOG.filter(function(x){return x.id!==id;});save();renderLogistica();}
 
 // ══════════════════════════════════════════════════════════════════
 // EMPRESAS
@@ -1601,14 +1658,14 @@ function salvarEmp(){
   else EMP.push(obj);
   save();closeM();renderEmpresas();syncEmpFiltros();syncCafeEmp();
 }
-function delEmp(id){if(!confirm('Apagar empresa?'))return;EMP=EMP.filter(function(x){return x.id!==id;});save();renderEmpresas();syncEmpFiltros();syncCafeEmp();}
+async function delEmp(id){if(!confirm('Apagar empresa?'))return;await sb.from('empresas').delete().eq('id',id);EMP=EMP.filter(function(x){return x.id!==id;});save();renderEmpresas();syncEmpFiltros();syncCafeEmp();}
 
 // ══════════════════════════════════════════════════════════════════
 // USUÁRIOS
 // ══════════════════════════════════════════════════════════════════
-function renderUsuarios(){
+async function renderUsuarios(){
   if(!canManageUsers()){document.getElementById('listaUsuarios').innerHTML='<div class="empty">Sem permissão.</div>';return;}
-  var users=getUsuarios();
+  var users=await getUsuarios();
   var el=document.getElementById('listaUsuarios');
   el.innerHTML=users.map(function(u){
     var roleLbl=u.role==='dev'?'Desenvolvedor':u.role==='admin'?'Administrador':'Usuário';
@@ -1665,29 +1722,28 @@ function editUsuario(id){
     +'</div>'
     +'<div class="mf"><button class="btn-sec" onclick="closeM()">Cancelar</button><button class="btn btn-purple" onclick="salvarUsuario()">Salvar</button></div>');
 }
-function salvarUsuario(){
+async function salvarUsuario(){
   var nome=document.getElementById('uNome').value.trim();
   var login=document.getElementById('uLogin').value.trim().toLowerCase();
   var senha=document.getElementById('uSenha').value;
   var role=document.getElementById('uRole').value;
   if(!nome||!login){alert('Preencha nome e login.');return;}
-  var users=getUsuarios();
+  var users=await getUsuarios();
   if(!window._editUserId&&!senha){alert('Informe a senha.');return;}
   if(senha&&senha.length<4){alert('Senha deve ter pelo menos 4 caracteres.');return;}
   if(!window._editUserId&&users.find(function(u){return u.login===login;})){alert('Login já em uso.');return;}
   if(window._editUserId){
-    var idx=users.findIndex(function(u){return u.id===window._editUserId;});
-    if(idx>=0){users[idx].nome=nome;users[idx].login=login;users[idx].role=role;if(senha)users[idx].senha=senha;}
+    var u=users.find(function(u){return u.id===window._editUserId;});
+    if(u){u.nome=nome;u.login=login;u.role=role;if(senha)u.senha=senha;await sb.from('usuarios').upsert(u);}
   } else {
-    users.push({id:'u'+Date.now(),login:login,senha:senha,nome:nome,role:role});
+    var novo={id:'u'+Date.now(),login:login,senha:senha,nome:nome,role:role};
+    await sb.from('usuarios').upsert(novo);
   }
-  localStorage.setItem('nv_USERS',JSON.stringify(users));
   closeM();renderUsuarios();showToast('Usuário salvo!');
 }
-function delUsuario(id){
+async function delUsuario(id){
   if(!confirm('Apagar usuário?'))return;
-  var users=getUsuarios().filter(function(u){return u.id!==id;});
-  localStorage.setItem('nv_USERS',JSON.stringify(users));
+  await sb.from('usuarios').delete().eq('id',id);
   renderUsuarios();showToast('Usuário removido.');
 }
 
@@ -1856,10 +1912,11 @@ function closeM(){document.getElementById('modalOv').classList.remove('open');do
 // ══════════════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════════════
-function init(){
+async function init(){
   var t=localStorage.getItem('nv_theme')||'light';
   setTheme(t);
-  load();
+  showToast('Carregando dados...');
+  await load();
   carregarCores();
   document.getElementById('tbDate').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
   document.getElementById('fRefData').value=hoje;
